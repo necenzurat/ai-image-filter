@@ -19,21 +19,36 @@ from app.models.schemas import (
     VerdictType
 )
 
-
-
 class PipelineService:
     """3-Layer 분석 파이프라인 서비스"""
-    
-    def __init__(self):
-        self.hash_service = HashService()
+
+    def __init__(
+        self,
+        db_vectors_path: str = './data/ai_dinohashes.npy',
+        metadata_path: str = './data/ai_metadata.csv',
+        similarity_threshold: float = 0.95
+    ):
+        """
+        PipelineService 초기화
+
+        Args:
+            db_vectors_path: AI 이미지 벡터 파일 경로
+            metadata_path: AI 이미지 메타데이터 파일 경로
+            similarity_threshold: DinoV2 유사도 임계값
+        """
+        self.hash_service = HashService(
+            db_vectors_path=db_vectors_path,
+            metadata_path=metadata_path,
+            threshold=similarity_threshold
+        )
         self.metadata_service = MetadataService()
         self.detection_service = DetectionService()
-        
+
         # 판정 임계값
         self.CONFIDENCE_THRESHOLD = 0.7
-        self.AI_DETECTION_WEIGHT = 0.6
-        self.METADATA_WEIGHT = 0.3
-        self.HASH_WEIGHT = 0.1
+        self.AI_DETECTION_WEIGHT = 0.3
+        self.METADATA_WEIGHT = 0.4
+        self.HASH_WEIGHT = 0.3
     
     async def analyze_image(
         self, 
@@ -56,13 +71,10 @@ class PipelineService:
         # ========== Layer 1: Hash Check ==========
         layer1_start = time.time()
         hash_data = self.hash_service.compute_hash(image_bytes)
-        is_duplicate = await self.hash_service.check_duplicate(hash_data["md5"])
         
         hash_result = HashResult(
-            md5=hash_data["md5"],
-            sha256=hash_data["sha256"],
-            perceptual_hash=hash_data.get("perceptual_hash"),
-            is_duplicate=is_duplicate
+            is_ai=hash_data["is_ai"],
+            similarity=hash_data["similarity"],
         )
         layers_executed.append("hash_check")
         layer1_time = (time.time() - layer1_start) * 1000
@@ -77,7 +89,9 @@ class PipelineService:
             exif_data=metadata_data.get("exif_data"),
             ai_tool_signatures=metadata_data.get("ai_tool_signatures", []),
             software_used=metadata_data.get("software_used"),
-            creation_date=metadata_data.get("creation_date")
+            creation_date=metadata_data.get("creation_date"),
+            exif_authenticity_score=metadata_data.get("exif_authenticity_score", 0.0),
+            exif_inconsistencies=metadata_data.get("exif_inconsistencies", [])
         )
         layers_executed.append("metadata_analysis")
         layer2_time = (time.time() - layer2_start) * 1000
@@ -148,31 +162,66 @@ class PipelineService:
         }
         reasons = []
         
-        # 1. Hash 기반 판정 (중복이면 이전 판정 참조 가능)
-        if hash_result.is_duplicate:
-            reasons.append("⚠️ 중복 이미지 발견")
+        # 1. Hash 기반 판정 (DinoV2 벡터 유사도)
+        if hash_result.is_ai:
+            scores["ai"] += self.HASH_WEIGHT
+            reasons.append(
+                f"⚠️ AI 이미지 DB와 매칭됨 "
+                f"(유사도: {hash_result.similarity:.1%})"
+            )
+        else:
+            scores["real"] += self.HASH_WEIGHT * 0.5
+            reasons.append(
+                f"✓ AI 이미지 DB에 미등록 "
+                f"(최대 유사도: {hash_result.similarity:.1%})"
+            )
         
         # 2. Metadata 기반 판정
+        # 2-1. AI 도구 시그니처 (강력한 AI 증거)
         if metadata_result.ai_tool_signatures:
             tools = ", ".join(metadata_result.ai_tool_signatures)
-            scores["ai"] += self.METADATA_WEIGHT
+            scores["ai"] += self.METADATA_WEIGHT * 0.4
             reasons.append(f"🔍 AI 도구 시그니처 발견: {tools}")
-        
+
+        # 2-2. C2PA 분석
         if metadata_result.has_c2pa:
-            reasons.append("📜 C2PA Content Credentials 발견")
-            # C2PA가 있으면 추가 분석 (AI 관련 assertion 확인)
             c2pa_info = metadata_result.c2pa_info or {}
             if c2pa_info.get("ai_related_assertions"):
-                scores["ai"] += self.METADATA_WEIGHT * 0.5
+                scores["ai"] += self.METADATA_WEIGHT * 0.2
                 reasons.append("🤖 C2PA에 AI 생성 관련 정보 포함")
-        
-        # EXIF에 특정 패턴이 없으면 의심
-        if not metadata_result.exif_data or len(metadata_result.exif_data) < 3:
-            scores["ai"] += self.METADATA_WEIGHT * 0.3
-            reasons.append("📷 EXIF 메타데이터 부족/없음 (AI 이미지 특성)")
+            else:
+                # C2PA가 있지만 AI 관련 정보가 없으면 실제 이미지 가능성
+                scores["real"] += self.METADATA_WEIGHT * 0.15
+                reasons.append("📜 C2PA Content Credentials 존재 (AI 관련 정보 없음)")
+
+        # 2-3. EXIF 진위성 점수 활용 (새로 추가된 핵심 기능)
+        exif_score = metadata_result.exif_authenticity_score
+
+        if exif_score >= 0.7:
+            # 높은 EXIF 진위성 = 실제 카메라로 촬영
+            scores["real"] += self.METADATA_WEIGHT * 0.35 * exif_score
+            reasons.append(f"📷 EXIF 진위성 높음 (점수: {exif_score:.2f}) - 실제 카메라 촬영 가능성")
+        elif exif_score >= 0.3:
+            # 중간 수준
+            scores["real"] += self.METADATA_WEIGHT * 0.15 * exif_score
+            reasons.append(f"📷 EXIF 데이터 존재 (진위성: {exif_score:.2f})")
         else:
-            scores["real"] += self.METADATA_WEIGHT * 0.3
-            reasons.append("📷 EXIF 메타데이터 존재")
+            # 낮은 EXIF 진위성 = AI 생성 의심
+            scores["ai"] += self.METADATA_WEIGHT * 0.25
+            reasons.append(f"⚠️ EXIF 진위성 낮음 (점수: {exif_score:.2f}) - AI 생성 의심")
+
+        # 2-4. EXIF 비정상 패턴 탐지
+        if metadata_result.exif_inconsistencies:
+            inconsistency_weight = min(len(metadata_result.exif_inconsistencies) * 0.05, 0.15)
+            scores["ai"] += self.METADATA_WEIGHT * inconsistency_weight
+            inconsistency_msgs = {
+                "editing_software_without_camera": "편집 SW만 존재",
+                "perfect_square_ai_resolution": "AI 생성 해상도",
+                "unrealistic_aperture": "비현실적 촬영값",
+                "missing_datetime_original": "원본 시간 누락"
+            }
+            detected = [inconsistency_msgs.get(inc, inc) for inc in metadata_result.exif_inconsistencies]
+            reasons.append(f"⚠️ EXIF 비정상 패턴: {', '.join(detected)}")
         
         # 3. AI Detection 기반 판정
         if detection_result:

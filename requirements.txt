@@ -19,7 +19,7 @@ transformers>=4.36.0
 accelerate>=0.25.0
 
 # ============ Metadata Analysis ============
-# c2pa-python>=0.6.0  # Optional: C2PA support (uncomment if needed)
+c2pa-python>=0.6.0  # Optional: C2PA support
 
 
 # ============ Streamlit UI ============

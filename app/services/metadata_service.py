@@ -64,25 +64,33 @@ class MetadataService:
             "ai_tool_signatures": [],
             "software_used": None,
             "creation_date": None,
-            "image_info": None
+            "image_info": None,
+            "exif_authenticity_score": 0.0,
+            "exif_inconsistencies": []
         }
-        
+
         # 1. EXIF 분석
         exif_result = self._extract_exif(image_bytes)
         result["exif_data"] = exif_result.get("exif")
         result["software_used"] = exif_result.get("software")
         result["creation_date"] = exif_result.get("creation_date")
         result["image_info"] = exif_result.get("image_info")
-        
+
         # 2. C2PA 분석
         if C2PA_AVAILABLE:
             c2pa_result = self._analyze_c2pa(image_bytes, filename)
             result["has_c2pa"] = c2pa_result.get("has_c2pa", False)
             result["c2pa_info"] = c2pa_result.get("info")
-        
+
         # 3. AI 도구 시그니처 검사
         result["ai_tool_signatures"] = self._detect_ai_signatures(result)
-        
+
+        # 4. EXIF 진위성 점수 계산
+        result["exif_authenticity_score"] = self._calculate_exif_authenticity_score(result["exif_data"])
+
+        # 5. EXIF 비정상 패턴 탐지
+        result["exif_inconsistencies"] = self._detect_exif_inconsistencies(result["exif_data"])
+
         return result
     
     def _extract_exif(self, image_bytes: bytes) -> Dict[str, Any]:
@@ -109,18 +117,21 @@ class MetadataService:
             if exif_data:
                 for tag_id, value in exif_data.items():
                     tag = TAGS.get(tag_id, tag_id)
-                    
+
+                    # 태그를 문자열로 변환 (정수형 태그 ID 처리)
+                    tag_key = str(tag)
+
                     # 바이너리 데이터 제외
                     if isinstance(value, bytes):
                         continue
-                    
+
                     # 특별 처리
                     if tag == "Software":
                         result["software"] = str(value)
                     elif tag in ["DateTime", "DateTimeOriginal", "DateTimeDigitized"]:
                         result["creation_date"] = str(value)
-                    
-                    result["exif"][tag] = str(value) if not isinstance(value, (int, float)) else value
+
+                    result["exif"][tag_key] = str(value) if not isinstance(value, (int, float)) else value
             
             # PNG tEXt 청크 등 추가 메타데이터
             if hasattr(img, 'info') and img.info:
@@ -206,6 +217,119 @@ class MetadataService:
         
         return list(set(detected))  # 중복 제거
     
+    def _calculate_exif_authenticity_score(self, exif_data: Optional[Dict[str, Any]]) -> float:
+        """
+        EXIF 데이터의 진위성 점수 계산 (0.0 ~ 1.0)
+        높을수록 실제 카메라로 촬영한 이미지일 가능성이 높음
+        """
+        if not exif_data:
+            return 0.0
+
+        score = 0.0
+        max_score = 0.0
+
+        # 1. 카메라 정보 존재 (매우 중요)
+        camera_fields = ["Make", "Model"]
+        for field in camera_fields:
+            max_score += 0.25
+            if field in exif_data:
+                value = str(exif_data[field]).lower()
+                # 실제 카메라 제조사 확인
+                real_cameras = ["canon", "nikon", "sony", "fujifilm", "olympus",
+                               "panasonic", "leica", "pentax", "hasselblad", "phase one",
+                               "apple", "samsung", "google", "huawei"]
+                if any(brand in value for brand in real_cameras):
+                    score += 0.25
+
+        # 2. 촬영 설정 존재 (중요)
+        exposure_fields = ["ExposureTime", "FNumber", "ISOSpeedRatings", "FocalLength"]
+        for field in exposure_fields:
+            max_score += 0.1
+            if field in exif_data:
+                score += 0.1
+
+        # 3. 시간 정보 존재
+        time_fields = ["DateTime", "DateTimeOriginal", "DateTimeDigitized"]
+        has_time = any(field in exif_data for field in time_fields)
+        max_score += 0.1
+        if has_time:
+            score += 0.1
+
+        # 4. 렌즈 정보 존재
+        lens_fields = ["LensModel", "LensMake", "LensSpecification"]
+        has_lens = any(field in exif_data for field in lens_fields)
+        max_score += 0.1
+        if has_lens:
+            score += 0.1
+
+        # 5. GPS 정보 존재 (실제 촬영 강력한 증거)
+        gps_fields = ["GPSLatitude", "GPSLongitude", "GPSAltitude"]
+        has_gps = any(field in exif_data for field in gps_fields)
+        max_score += 0.15
+        if has_gps:
+            score += 0.15
+
+        # 6. 썸네일 존재 (카메라가 자동 생성)
+        thumbnail_fields = ["ThumbnailImage", "JPEGThumbnail"]
+        has_thumbnail = any(field in exif_data for field in thumbnail_fields)
+        max_score += 0.05
+        if has_thumbnail:
+            score += 0.05
+
+        # 7. 색공간 정보
+        color_fields = ["ColorSpace", "WhiteBalance"]
+        has_color = any(field in exif_data for field in color_fields)
+        max_score += 0.05
+        if has_color:
+            score += 0.05
+
+        # 정규화
+        return score / max_score if max_score > 0 else 0.0
+
+    def _detect_exif_inconsistencies(self, exif_data: Optional[Dict[str, Any]]) -> List[str]:
+        """
+        EXIF 데이터의 비정상적인 패턴 탐지
+        AI 생성 이미지는 종종 불완전하거나 조작된 EXIF를 가짐
+        """
+        inconsistencies = []
+
+        if not exif_data:
+            return inconsistencies
+
+        # 1. Software 필드에 편집 도구만 있고 카메라 정보 없음
+        has_software = "Software" in exif_data
+        has_camera = "Make" in exif_data or "Model" in exif_data
+
+        if has_software and not has_camera:
+            software = str(exif_data["Software"]).lower()
+            editing_tools = ["photoshop", "gimp", "pixelmator", "affinity", "paint"]
+            if any(tool in software for tool in editing_tools):
+                inconsistencies.append("editing_software_without_camera")
+
+        # 2. 이미지 크기가 매우 정확한 정사각형/특정 비율 (AI 생성 특징)
+        # 512x512, 768x768, 1024x1024 등
+        if "ExifImageWidth" in exif_data and "ExifImageHeight" in exif_data:
+            width = exif_data["ExifImageWidth"]
+            height = exif_data["ExifImageHeight"]
+            if isinstance(width, int) and isinstance(height, int):
+                if width == height and width in [512, 768, 1024, 2048]:
+                    inconsistencies.append("perfect_square_ai_resolution")
+
+        # 3. 촬영 설정이 비현실적
+        if "FNumber" in exif_data:
+            f_number = exif_data["FNumber"]
+            # F값이 비정상적으로 작거나 큼
+            if isinstance(f_number, (int, float)) and (f_number < 0.5 or f_number > 64):
+                inconsistencies.append("unrealistic_aperture")
+
+        # 4. DateTime이 있지만 DateTimeOriginal이 없음 (의심)
+        has_datetime = "DateTime" in exif_data
+        has_original = "DateTimeOriginal" in exif_data
+        if has_datetime and not has_original and has_camera:
+            inconsistencies.append("missing_datetime_original")
+
+        return inconsistencies
+
     def has_ai_indicators(self, metadata_result: Dict[str, Any]) -> bool:
         """AI 생성 지표가 있는지 확인"""
         # C2PA에 AI 관련 정보가 있는 경우
@@ -213,14 +337,14 @@ class MetadataService:
             c2pa_info = metadata_result.get("c2pa_info", {})
             if c2pa_info.get("ai_related_assertions"):
                 return True
-        
+
         # AI 도구 시그니처가 발견된 경우
         if metadata_result.get("ai_tool_signatures"):
             return True
-        
+
         # EXIF에 AI 관련 정보가 있는 경우
         exif = metadata_result.get("exif_data", {})
         if exif.get("sd_parameters"):  # Stable Diffusion
             return True
-        
+
         return False

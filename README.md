@@ -1,15 +1,15 @@
-# 🔍 AI Image Filter Pipeline
+# 🔍 AI Image Filter
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.31+-red.svg)](https://streamlit.io)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**AI 생성 이미지를 필터링하는 3-Layer 검증 파이프라인**
+**AI 생성 이미지를 필터링하는 3-Layer 검증 서비스**
 
 > 생성형 AI의 발전으로 학습 데이터 오염(Data Contamination) 문제가 발생하고 있습니다. 
-> 이 서비스는 현재 오픈소스 모델 + 해시 + 메타데이터를 사용하여 이미지 데이터의 오염을 예방하는 것이 가능한지 테스트해보기 위해 진행하였습니다.
-> [Provenance Detection for AI-Generated Images: Combining Perceptual Hashing, Homomorphic Encryption, and AI Detection Models](https://arxiv.org/html/2503.11195v1)을 참고했습니다.
+> 이 서비스는 ai로 생성된 이미지의 경우 일반 디지털 사진에 있는 카메라 모델, 렌즈 유형, 셔터 속도, GPS 위치 정보 등 EXIF 데이터가 존재하지 않는다는 부분과 [Provenance Detection for AI-Generated Images: Combining Perceptual Hashing, Homomorphic Encryption, and AI Detection Models](https://arxiv.org/html/2503.11195v1)에 제시된 내용을 바탕으로 현재 해시 - 메타데이터 - 오픈소스 탐지 모델 이렇게 3Layer를 사용하여 이미지 데이터의 오염을 예방하는 것이 가능한지 테스트해보기 위해 진행하였습니다.
+> DinoHash 사용 시 필요한 데이터는 [ai-vs-human-generated-dataset](https://www.kaggle.com/datasets/alessandrasala79/ai-vs-human-generated-dataset/data)를 다운받아 ai 생성 이미지만 DinoHash로 변경하여 활용하였습니다.
 ---
 
 ## 📋 목차
@@ -135,7 +135,7 @@ curl -X POST "http://localhost:8000/api/v1/analyze" \
   "final_verdict": "ai_generated",
   "confidence_score": 0.87,
   "reasoning": "🤖 AI 탐지 모델 판정: AI 생성 (확신도: 87.0%)",
-  "hash_result": { "md5": "...", "sha256": "..." },
+  "hash_result": { "DinoHash": "..."},
   "metadata_result": { "has_c2pa": false, "ai_tool_signatures": [] },
   "detection_result": { "is_ai_generated": true, "confidence": 0.87 }
 }

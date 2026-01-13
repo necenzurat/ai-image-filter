@@ -8,8 +8,7 @@ import asyncio
 from typing import Dict, Any, Optional
 from PIL import Image
 import torch
-from transformers import pipeline, AutoModelForImageClassification, AutoFeatureExtractor
-from functools import lru_cache
+from transformers import pipeline
 
 
 class DetectionService:
@@ -17,7 +16,7 @@ class DetectionService:
     
     # 사용 가능한 모델 목록
     AVAILABLE_MODELS = {
-        "umm-maybe/AI-image-detector": {
+        "Ateeqq/ai-vs-human-image-detector": {
             "description": "AI vs Real image classifier",
             "labels": {"artificial": "ai", "human": "real"}
         },
@@ -27,7 +26,7 @@ class DetectionService:
         }
     }
     
-    DEFAULT_MODEL = "umm-maybe/AI-image-detector"
+    DEFAULT_MODEL = "Ateeqq/ai-vs-human-image-detector"
     
     def __init__(self, model_name: str = None):
         self.model_name = model_name or self.DEFAULT_MODEL
@@ -98,10 +97,6 @@ class DetectionService:
         """모델 결과 파싱"""
         raw_scores = {r["label"]: r["score"] for r in results}
         
-        # 모델별 라벨 매핑
-        model_config = self.AVAILABLE_MODELS.get(self.model_name, {})
-        label_map = model_config.get("labels", {"artificial": "ai", "human": "real"})
-        
         # AI 관련 라벨 점수 합산
         ai_score = 0.0
         real_score = 0.0
@@ -113,7 +108,7 @@ class DetectionService:
             if any(ai_key in label_lower for ai_key in ["artificial", "ai", "fake", "generated", "synthetic"]):
                 ai_score += score
             # Real 관련 라벨
-            elif any(real_key in label_lower for real_key in ["human", "real", "authentic", "natural"]):
+            elif any(real_key in label_lower for real_key in ["human", "real", "authentic", "natural","hum"]):
                 real_score += score
         
         # 판정
@@ -126,41 +121,6 @@ class DetectionService:
             "confidence": round(confidence, 4),
             "raw_scores": raw_scores
         }
-    
-    async def detect_with_multiple_models(self, image_bytes: bytes) -> Dict[str, Any]:
-        """
-        여러 모델로 앙상블 탐지 (더 정확한 결과)
-        """
-        results = {}
-        
-        for model_name in self.AVAILABLE_MODELS.keys():
-            try:
-                temp_detector = DetectionService(model_name)
-                result = await temp_detector.detect(image_bytes)
-                results[model_name] = result
-            except Exception as e:
-                results[model_name] = {"error": str(e)}
-        
-        # 앙상블 결과 계산
-        ai_votes = 0
-        total_confidence = 0.0
-        valid_count = 0
-        
-        for model_name, result in results.items():
-            if "error" not in result:
-                valid_count += 1
-                total_confidence += result["confidence"]
-                if result["is_ai_generated"]:
-                    ai_votes += 1
-        
-        ensemble_result = {
-            "individual_results": results,
-            "ensemble_verdict": ai_votes > valid_count / 2 if valid_count > 0 else False,
-            "ensemble_confidence": total_confidence / valid_count if valid_count > 0 else 0.0,
-            "models_used": valid_count
-        }
-        
-        return ensemble_result
     
     def get_model_info(self) -> Dict[str, Any]:
         """현재 모델 정보 반환"""

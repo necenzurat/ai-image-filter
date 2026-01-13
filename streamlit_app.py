@@ -81,9 +81,17 @@ def main():
         
         st.header("📊 분석 파이프라인")
         st.markdown("""
-        **Layer 1**: Hash Check  
-        **Layer 2**: Metadata Analysis  
-        **Layer 3**: AI Detection([HuggingFace](https://huggingface.co/dima806/ai_vs_human_generated_image_detection))
+        **Layer 1**: DinoV2 Hash Check
+        - facebook/dinov2-small 벡터 유사도
+
+        **Layer 2**: Metadata Analysis
+        - EXIF 진위성 점수
+        - EXIF 비정상 패턴 탐지
+        - C2PA Content Credentials
+        - AI 도구 시그니처
+
+        **Layer 3**: AI Detection
+        - [HuggingFace Model](https://huggingface.co/dima806/ai_vs_human_generated_image_detection)
         """)
         st.info("ℹ️ Stateless 모드 - 데이터베이스를 사용하지 않습니다. 모든 분석은 실시간으로만 처리됩니다.")
         
@@ -180,25 +188,36 @@ def main():
                         
                         if response.status_code == 200:
                             result = response.json()
+                            metadata = result.get("metadata_result", {})
+                            hash_res = result.get("hash_result", {})
                             results.append({
                                 "파일명": file.name,
                                 "판정": result.get("final_verdict", "unknown"),
                                 "확신도": f"{result.get('confidence_score', 0):.1%}",
-                                "AI 시그니처": ", ".join(result.get("metadata_result", {}).get("ai_tool_signatures", [])) or "-"
+                                "DinoV2 유사도": f"{hash_res.get('similarity', 0):.1%}",
+                                "EXIF 진위성": f"{metadata.get('exif_authenticity_score', 0):.2f}",
+                                "AI 시그니처": ", ".join(metadata.get("ai_tool_signatures", [])) or "-",
+                                "EXIF 비정상": len(metadata.get("exif_inconsistencies", []))
                             })
                         else:
                             results.append({
                                 "파일명": file.name,
                                 "판정": "error",
                                 "확신도": "-",
-                                "AI 시그니처": "-"
+                                "DinoV2 유사도": "-",
+                                "EXIF 진위성": "-",
+                                "AI 시그니처": "-",
+                                "EXIF 비정상": "-"
                             })
                     except Exception as e:
                         results.append({
                             "파일명": file.name,
                             "판정": "error",
                             "확신도": "-",
-                            "AI 시그니처": str(e)[:50]
+                            "DinoV2 유사도": "-",
+                            "EXIF 진위성": "-",
+                            "AI 시그니처": str(e)[:30],
+                            "EXIF 비정상": "-"
                         })
                     
                     progress_bar.progress((i + 1) / len(uploaded_files))
@@ -271,33 +290,89 @@ def display_result(result: dict):
         
         st.divider()
         
-        # Layer 1: Hash
-        st.subheader("Layer 1: Hash Check")
+        # Layer 1: Hash Check (DinoV2)
+        st.subheader("Layer 1: Hash Check (DinoV2)")
         hash_result = result.get("hash_result", {})
         col1, col2 = st.columns(2)
-        col1.code(f"MD5: {hash_result.get('md5', 'N/A')}")
-        col2.code(f"SHA256: {hash_result.get('sha256', 'N/A')[:32]}...")
-        if hash_result.get("is_duplicate"):
-            st.warning("⚠️ 중복 이미지 발견")
+        with col1:
+            similarity = hash_result.get('similarity', 0)
+            st.metric("DinoV2 유사도", f"{similarity:.1%}")
+        with col2:
+            is_ai = hash_result.get("is_ai", False)
+            if is_ai:
+                st.error("⚠️ AI 이미지 DB 매칭")
+            else:
+                st.success("✓ DB 미등록")
         
         st.divider()
         
-        # Layer 2: Metadata
+        # Layer 2: Metadata Analysis
         st.subheader("Layer 2: Metadata Analysis")
         metadata = result.get("metadata_result", {})
-        
-        if metadata.get("has_c2pa"):
-            st.success("📜 C2PA Content Credentials 발견")
-        
+
+        # EXIF 진위성 점수 (새로 추가)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            exif_score = metadata.get("exif_authenticity_score", 0)
+            st.metric("EXIF 진위성", f"{exif_score:.2f}")
+            if exif_score >= 0.7:
+                st.success("📷 실제 카메라 촬영 가능성")
+            elif exif_score >= 0.3:
+                st.info("📷 중간 수준")
+            else:
+                st.warning("⚠️ AI 생성 의심")
+
+        with col2:
+            if metadata.get("has_c2pa"):
+                st.success("📜 C2PA 존재")
+            else:
+                st.info("📜 C2PA 없음")
+
+        with col3:
+            sig_count = len(metadata.get("ai_tool_signatures", []))
+            if sig_count > 0:
+                st.error(f"🔍 AI 시그니처: {sig_count}개")
+            else:
+                st.success("✓ AI 시그니처 없음")
+
+        # EXIF 비정상 패턴 (새로 추가)
+        exif_inconsistencies = metadata.get("exif_inconsistencies", [])
+        if exif_inconsistencies:
+            st.warning("⚠️ **EXIF 비정상 패턴 탐지:**")
+            inconsistency_msgs = {
+                "editing_software_without_camera": "편집 소프트웨어만 존재 (카메라 정보 없음)",
+                "perfect_square_ai_resolution": "AI 생성 특징적 해상도 (512x512, 1024x1024 등)",
+                "unrealistic_aperture": "비현실적인 조리개 값",
+                "missing_datetime_original": "원본 촬영 시간 정보 누락"
+            }
+            for inc in exif_inconsistencies:
+                st.write(f"  • {inconsistency_msgs.get(inc, inc)}")
+
+        # 상세 정보
+        st.markdown("**상세 정보:**")
+
         if metadata.get("ai_tool_signatures"):
-            st.warning(f"🔍 AI 도구 시그니처: {', '.join(metadata['ai_tool_signatures'])}")
-        
+            st.warning(f"🔍 AI 도구: {', '.join(metadata['ai_tool_signatures'])}")
+
         if metadata.get("software_used"):
             st.info(f"💻 소프트웨어: {metadata['software_used']}")
-        
+
+        if metadata.get("creation_date"):
+            st.info(f"📅 촬영/생성 날짜: {metadata['creation_date']}")
+
         if metadata.get("exif_data"):
-            with st.expander("EXIF 데이터"):
-                st.json(metadata["exif_data"])
+            with st.expander("📊 전체 EXIF 데이터 보기"):
+                exif_data = metadata["exif_data"]
+                # 주요 필드만 먼저 표시
+                important_fields = ["Make", "Model", "Software", "DateTime", "DateTimeOriginal",
+                                   "ExposureTime", "FNumber", "ISOSpeedRatings", "FocalLength"]
+                important_data = {k: v for k, v in exif_data.items() if k in important_fields}
+                if important_data:
+                    st.markdown("**주요 EXIF 정보:**")
+                    st.json(important_data)
+
+                st.markdown("**전체 EXIF 데이터:**")
+                st.json(exif_data)
         
         st.divider()
         
