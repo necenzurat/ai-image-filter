@@ -7,9 +7,12 @@
 
 **AI 생성 이미지를 필터링하는 3-Layer 검증 서비스**
 
-> 생성형 AI의 발전으로 학습 데이터 오염(Data Contamination) 문제가 발생하고 있습니다. 
-> 이 서비스는 ai로 생성된 이미지의 경우 일반 디지털 사진에 있는 카메라 모델, 렌즈 유형, 셔터 속도, GPS 위치 정보 등 EXIF 데이터가 존재하지 않는다는 부분과 [Provenance Detection for AI-Generated Images: Combining Perceptual Hashing, Homomorphic Encryption, and AI Detection Models](https://arxiv.org/html/2503.11195v1)에 제시된 내용을 바탕으로 현재 해시 - 메타데이터 - 오픈소스 탐지 모델 이렇게 3Layer를 사용하여 이미지 데이터의 오염을 예방하는 것이 가능한지 테스트해보기 위해 진행하였습니다.
-> DinoHash 사용 시 필요한 데이터는 [ai-vs-human-generated-dataset](https://www.kaggle.com/datasets/alessandrasala79/ai-vs-human-generated-dataset/data)를 다운받아 ai 생성 이미지만 DinoHash로 변경하여 활용하였습니다.
+- 생성형 AI의 발전으로 학습 데이터 오염(Data Contamination) 문제가 발생하고 있습니다.  
+- 이 서비스는 ai로 생성된 이미지의 경우 일반 디지털 사진에 있는 카메라 모델, 렌즈 유형, 셔터 속도, GPS 위치 정보 등 EXIF 데이터가 존재하지 않는다는 부분과 [Provenance Detection for AI-Generated Images: Combining Perceptual Hashing, Homomorphic Encryption, and AI Detection Models](https://arxiv.org/html/2503.11195v1)에 제시된 내용을 바탕으로 현재 해시 - 메타데이터 - 오픈소스 탐지 모델 이렇게 3Layer를 사용하여 이미지 데이터의 오염을 예방하는 것이 가능한지 테스트해보기 위해 진행하였습니다.  
+- DinoHash 사용 시 필요한 데이터는 [ai-vs-human-generated-dataset](https://www.kaggle.com/datasets/alessandrasala79/ai-vs-human-generated-dataset/data)를 다운받아 ai 생성 이미지 39975장을 DinoHash로 변경후 npy 파일로 저장하여 활용하였습니다.  
+- 메타데이터 검사의 경우 C2PA Content Credentials 검증, EXIF 분석, AI 도구 시그니처 탐지 등을 활용하였고, 특히 EXIF 분석에서 EXIF 데이터의 진위성 점수 계산 (0.0 ~ 1.0)을 추가하여 정확도를 높히려 하였습니다.  
+- AI 모델은 허깅스페이스의 [ai_vs_human_generated_image_detection](https://huggingface.co/dima806/ai_vs_human_generated_image_detection)을 사용하였습니다.
+- 최종적으로는 해시/메타데이터/오픈소스 탐지 결과 각각에 0.3/0.4/0.3의 가중치를 각각 부여하여 종합적으로 판정하였습니다.  
 ---
 
 ## 📋 목차
@@ -57,18 +60,18 @@
 │                     (app/main.py)                       │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │   Layer 1   │  │   Layer 2   │  │   Layer 3   │    │
-│  │ Hash Check  │  │  Metadata   │  │ AI Detect   │    │
-│  │             │  │  Analysis   │  │             │    │
-│  │ - MD5       │  │ - C2PA      │  │ - HF Model  │    │
-│  │ - SHA256    │  │ - EXIF      │  │ - Inference │    │
-│  │ - pHash     │  │ - Signature │  │             │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘    │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │
+│  │   Layer 1   │  │   Layer 2   │  │   Layer 3   │      │
+│  │ Hash Check  │  │  Metadata   │  │ AI Detect   │      │
+│  │             │  │  Analysis   │  │             │      │
+│  │ - DinoHash  │  │ - C2PA      │  │ - HF Model  │      │
+│  │             │  │ - EXIF      │  │ - Inference │      │
+│  │             │  │ - Signature │  │             │      │
+│  └─────────────┘  └─────────────┘  └─────────────┘      │
 │                                                         │
 ├─────────────────────────────────────────────────────────┤
 │                  Pipeline Service                       │
-│              (종합 판정 + 가중치 계산)                    │
+│              (종합 판정 + 가중치 계산)                     │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -185,6 +188,9 @@ docker-compose logs -f
 ---
 
 ## 📊 google의 SynthID Detector와 비교
+> 테스트 데이터 이미지에 대한 설명은 /testIMG 폴더 내의 data-readme.md를 참고해주세요. 관련 내용은 프로젝트 회고와 함께 블로그 포스트에 올릴 예정입니다.
+
+
 
 ---
 

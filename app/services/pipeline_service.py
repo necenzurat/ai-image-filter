@@ -54,7 +54,6 @@ class PipelineService:
         self, 
         image_bytes: bytes, 
         filename: str,
-        skip_ai_detection: bool = False
     ) -> AnalysisResult:
         """
         이미지 종합 분석 실행
@@ -62,7 +61,6 @@ class PipelineService:
         Args:
             image_bytes: 이미지 바이너리 데이터
             filename: 파일명
-            skip_ai_detection: AI 탐지 스킵 여부 (빠른 분석용)
         """
         start_time = time.time()
         analysis_id = str(uuid.uuid4())
@@ -100,19 +98,18 @@ class PipelineService:
         detection_result = None
         layer3_time = 0
         
-        if not skip_ai_detection:
-            layer3_start = time.time()
-            detection_data = await self.detection_service.detect(image_bytes)
+        layer3_start = time.time()
+        detection_data = await self.detection_service.detect(image_bytes)
             
-            if "error" not in detection_data:
-                detection_result = DetectionResult(
-                    model_name=detection_data["model_name"],
-                    is_ai_generated=detection_data["is_ai_generated"],
-                    confidence=detection_data["confidence"],
-                    raw_scores=detection_data.get("raw_scores")
+        if "error" not in detection_data:
+            detection_result = DetectionResult(
+                model_name=detection_data["model_name"],
+                is_ai_generated=detection_data["is_ai_generated"],
+                confidence=detection_data["confidence"],
+                raw_scores=detection_data.get("raw_scores")
                 )
-            layers_executed.append("ai_detection")
-            layer3_time = (time.time() - layer3_start) * 1000
+        layers_executed.append("ai_detection")
+        layer3_time = (time.time() - layer3_start) * 1000
         
         # ========== 종합 판정 ==========
         verdict, confidence, reasoning = self._compute_verdict(
@@ -137,9 +134,6 @@ class PipelineService:
             total_execution_time_ms=round(total_time, 2),
             layers_executed=layers_executed
         )
-        
-
-        
         return result
     
     def _compute_verdict(

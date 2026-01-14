@@ -75,7 +75,6 @@ def main():
         st.header("⚙️ 설정")
         
         api_url = st.text_input("API URL", value=API_URL)
-        skip_ai_detection = st.checkbox("AI 탐지 스킵 (빠른 분석)", value=False)
         
         st.divider()
         
@@ -130,12 +129,10 @@ def main():
                             # API 호출
                             uploaded_file.seek(0)
                             files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-                            params = {"skip_ai_detection": skip_ai_detection}
                             
                             response = requests.post(
                                 f"{api_url}/analyze",
                                 files=files,
-                                params=params,
                                 timeout=60
                             )
                             
@@ -177,12 +174,10 @@ def main():
                     try:
                         file.seek(0)
                         files = {"file": (file.name, file.getvalue(), file.type)}
-                        params = {"skip_ai_detection": skip_ai_detection}
                         
                         response = requests.post(
                             f"{api_url}/analyze",
                             files=files,
-                            params=params,
                             timeout=60
                         )
                         
@@ -389,7 +384,7 @@ def display_result(result: dict):
                 for label, score in detection["raw_scores"].items():
                     st.progress(score, text=f"{label}: {score:.1%}")
         else:
-            st.info("AI 탐지 스킵됨")
+            st.info("AI 탐지가 진행되지 않았습니다.")
     
     # 실행 시간
     st.caption(f"⏱️ 총 실행 시간: {result.get('total_execution_time_ms', 0):.0f}ms")

@@ -15,7 +15,6 @@ from app.services.pipeline_service import PipelineService
 from app.models.schemas import (
     AnalysisResult,
     BatchAnalysisResult,
-    PipelineConfig
 )
 
 router = APIRouter()
@@ -29,8 +28,7 @@ pipeline_service = PipelineService()
 
 @router.post("/analyze", response_model=AnalysisResult)
 async def analyze_single_image(
-    file: UploadFile = File(...),
-    skip_ai_detection: bool = False
+    file: UploadFile = File(...)
 ):
     """
     단일 이미지 분석
@@ -44,8 +42,7 @@ async def analyze_single_image(
         contents = await file.read()
         result = await pipeline_service.analyze_image(
             image_bytes=contents,
-            filename=file.filename,
-            skip_ai_detection=skip_ai_detection
+            filename=file.filename
         )
         return result
     except Exception as e:
@@ -55,7 +52,6 @@ async def analyze_single_image(
 @router.post("/analyze/batch", response_model=BatchAnalysisResult)
 async def analyze_batch_images(
     files: List[UploadFile] = File(...),
-    skip_ai_detection: bool = False
 ):
     """
     배치 이미지 분석 (최대 50개)
@@ -70,8 +66,7 @@ async def analyze_batch_images(
                 contents = await file.read()
                 result = await pipeline_service.analyze_image(
                     image_bytes=contents,
-                    filename=file.filename,
-                    skip_ai_detection=skip_ai_detection
+                    filename=file.filename
                 )
                 results.append(result)
             except Exception as e:
