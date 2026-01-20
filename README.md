@@ -153,27 +153,6 @@ curl -X POST "http://localhost:8000/api/v1/analyze" \
 
 ---
 
-## ☁️ 배포
-
-### Hugging Face Spaces (권장)
-
-1. [Hugging Face](https://huggingface.co)에서 새 Space 생성
-2. SDK로 **Docker** 선택
-3. 이 저장소 파일들 업로드
-4. Secrets 설정 불필요 (Stateless 모드)
-
-### Docker
-
-```bash
-# 빌드 및 실행
-docker-compose up -d
-
-# 로그 확인
-docker-compose logs -f
-```
-
----
-
 ## 🛠 기술 스택
 
 | 분류 | 기술 |
@@ -188,9 +167,8 @@ docker-compose logs -f
 ---
 
 ## 📊 google의 SynthID Detector와 비교
-> 테스트 데이터 이미지에 대한 설명은 /testIMG 폴더 내의 data-readme.md를 참고해주세요. 관련 내용은 프로젝트 회고와 함께 블로그 포스트에 올릴 예정입니다.
-
-
+> 테스트 데이터 이미지에 대한 설명은 /testIMG 폴더 내의 data-readme.md를 참고해주세요. <br/>
+> 블로그 프로젝트 카테고리의 [3-Layer Image Filter](https://world970511.github.io/blog/posts/2026-01-19-3-layers-image-filter.html) 에 testIMG를 사용한 테스트 결과를 정리했습니다.
 
 ---
 
