@@ -23,7 +23,7 @@
 
 
 ## ✨ view
-- 실제 이미지를 데이터와 ChatGPT와 Gemini에 동일한 프롬프트를 제공하여 이미지를 생성한 후 편집한 이미지를 모은 데이터입니다. 실제 이미지와 생성된 이미지는 모두 동일한 사이즈입니다. 실제 이미지를 바탕으로 작성된 프롬프트는 아래와 같습니다.  
+- 실제 이미지와 실제 이미지를 묘사한 내용을 바탕으로 프롬프트를 작성 후 ChatGPT와 Gemini에 동일하게 제공하여 이미지를 생성해 편집한 이미지로 구성되어 있습니다. 실제 이미지와 생성된 이미지는 Python을 사용하여 동일한 사이즈로 정리했습니다. 실제 이미지를 바탕으로 작성된 프롬프트는 아래와 같습니다.  
 
   - "A vibrant vertical street photography of Yonsei-ro, Sinchon in spring. Cherry blossom petals are falling over the pedestrian street. In the background, the iconic red U-Plex pipe structure is visible. Young students in light spring outfits are walking, blurred motion to emphasize the energy. Bright midday sunlight, crisp shadows, 8k resolution, photorealistic, urban aesthetic" (서울 서대문구 신촌의 봄 풍경 사진: 핵심 요소- 벚꽃 흩날림, 빨간 파이프(유플렉스), 보행자의 역동성, 밝은 정오의 빛)
 
@@ -37,13 +37,4 @@
 
 - 생성된 풍경 사진/원본 이미지를 ai로 추가 보정한 풍경 사진 등을 판별하는 것이 가능한지 확인하려 진행하였습니다.
 - 개수: 18(gpt:6, gemini:6, real:6)
-
----
-## 🔨 추가하려 했으나 만들지 못한 것들
-
-- 실제 이미지 파일 중 exif/메타데이터를 제거한 데이터
-
-
-
-
 
