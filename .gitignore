@@ -55,13 +55,11 @@ htmlcov/
 .nox/
 
 # ============ Data ============
-data/
 *.jpg
 *.jpeg
 *.png
 *.gif
 *.webp
-!data/.gitkeep
 
 # ============ Model Cache ============
 .cache/
