@@ -8,15 +8,8 @@ import json
 from typing import Dict, Any, List, Optional
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
-
-# C2PA is an optional import (might not be installed)
-try:
-    from c2pa import Reader
-
-    C2PA_AVAILABLE = True
-except ImportError:
-    C2PA_AVAILABLE = False
-
+from c2pa import Reader
+C2PA_AVAILABLE = True
 
 class MetadataService:
     """Image Metadata Analysis Service"""
@@ -43,6 +36,10 @@ class MetadataService:
         "playground ai",
         "ideogram",
         "flux",
+        "ChatGPT",
+        "Sora",
+        "SynthID",
+        "Google",
         # General AI Related Keywords
         "ai generated",
         "ai-generated",
@@ -158,20 +155,46 @@ class MetadataService:
             return result
 
         try:
-            # Attempt to read C2PA manifest
-            reader = Reader.from_stream("image/jpeg", io.BytesIO(image_bytes))
+            # Detect MIME type from image bytes
+            try:
+                img = Image.open(io.BytesIO(image_bytes))
+                format_lower = img.format.lower() if img.format else "unknown"
+                mime_map = {
+                    "jpeg": "image/jpeg",
+                    "jpg": "image/jpeg",
+                    "png": "image/png",
+                    "webp": "image/webp",
+                    "gif": "image/gif",
+                    "bmp": "image/bmp",
+                    "tiff": "image/tiff",
+                    "tif": "image/tiff",
+                }
+                mime_type = mime_map.get(format_lower, "application/octet-stream")
+                print(f"DEBUG: Detected MIME type: {mime_type} for {filename}")
+            except Exception as e:
+                mime_type = "application/octet-stream"
+                print(f"DEBUG: Failed to detect MIME type: {e}, using default")
 
+            reader = Reader(mime_type, io.BytesIO(image_bytes))
+            print(f"DEBUG: Reader created successfully for {filename}")
+            print(f"DEBUG: reader = {reader}")
             if reader:
                 result["has_c2pa"] = True
 
                 # Extract manifest info
                 manifest_json = reader.json()
+                print(f"DEBUG: manifest_json = {manifest_json}")
                 manifest_data = json.loads(manifest_json)
 
                 result["info"] = {
                     "active_manifest": manifest_data.get("active_manifest"),
                     "manifests": list(manifest_data.get("manifests", {}).keys()),
+                    "ai_tool_signatures_in_c2pa": [],
                 }
+
+                # Search entire manifest_data for AI tool signatures
+                found_signatures = self._search_dict_for_signatures(manifest_data, self.AI_TOOL_SIGNATURES)
+                result["info"]["ai_tool_signatures_in_c2pa"] = list(set(found_signatures))
 
                 # Check AI generation related assertions
                 for manifest_id, manifest in manifest_data.get("manifests", {}).items():
@@ -189,6 +212,31 @@ class MetadataService:
             result["error"] = str(e) if "no manifest" not in str(e).lower() else None
 
         return result
+
+    def _search_dict_for_signatures(self, data, signatures):
+        """Recursively search dict/list for strings containing AI tool signatures"""
+        found = []
+        
+        def search(obj):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if isinstance(value, str):
+                        for sig in signatures:
+                            if sig.lower() in value.lower():
+                                found.append(sig)
+                    elif isinstance(value, (dict, list)):
+                        search(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    if isinstance(item, str):
+                        for sig in signatures:
+                            if sig.lower() in item.lower():
+                                found.append(sig)
+                    elif isinstance(item, (dict, list)):
+                        search(item)
+        
+        search(data)
+        return list(set(found))  # Remove duplicates
 
     def _detect_ai_signatures(self, metadata_result: Dict[str, Any]) -> List[str]:
         """Detect AI Tool Signatures in Metadata"""
