@@ -1,6 +1,6 @@
 """
 AI Image Filter Pipeline - FastAPI Backend
-ML 학습 데이터셋에서 AI 생성 이미지를 필터링하는 파이프라인
+Pipeline for filtering AI-generated images from ML training datasets
 """
 
 from fastapi import FastAPI
@@ -10,10 +10,9 @@ from contextlib import asynccontextmanager
 from app.api import routes
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """앱 시작/종료 시 실행되는 로직"""
+    """Logic executed on app startup/shutdown"""
     # Startup
     print("✅ Service initialized (Stateless)")
     yield
@@ -24,22 +23,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AI Image Filter Pipeline",
     description="""
-    ## ML 학습 데이터 품질 검증 파이프라인
+    ## ML Training Data Quality Verification Pipeline
     
-    AI 생성 이미지를 탐지하여 학습 데이터셋의 품질을 보장합니다.
+    Ensures the quality of training datasets by detecting AI-generated images.
     
-    ### 3-Layer 검증 시스템
-    - **Layer 1**: Hash Check - 이미지 해시 계산 (MD5, SHA256, Perceptual Hash)
-    - **Layer 2**: Metadata Analysis - C2PA/EXIF 분석 및 AI 도구 시그니처 탐지
-    - **Layer 3**: AI Detection - ML 모델 기반 AI 생성 이미지 탐지
+    ### 3-Layer Verification System
+    - **Layer 1**: Hash Check - Image hash calculation (MD5, SHA256, Perceptual Hash)
+    - **Layer 2**: Metadata Analysis - C2PA/EXIF analysis and AI tool signature detection
+    - **Layer 3**: AI Detection - ML model-based AI generated image detection
     
-    *Stateless 서비스 - 데이터베이스 미사용*
+    *Stateless Service - No Database Used*
     """,
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# CORS 설정
+# CORS Settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -48,17 +47,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 라우터 등록
+# Register Router
 app.include_router(routes.router, prefix="/api/v1", tags=["Image Analysis"])
 
 
 @app.get("/", tags=["Health"])
 async def root():
-    return {
-        "message": "AI Image Filter Pipeline API",
-        "docs": "/docs",
-        "health": "ok"
-    }
+    return {"message": "AI Image Filter Pipeline API", "docs": "/docs", "health": "ok"}
 
 
 @app.get("/health", tags=["Health"])

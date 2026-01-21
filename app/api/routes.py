@@ -1,5 +1,5 @@
 """
-API Routes - 이미지 분석 엔드포인트
+API Routes - Image Analysis Endpoints
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
@@ -19,7 +19,7 @@ from app.models.schemas import (
 
 router = APIRouter()
 
-# 서비스 인스턴스
+# Service Instances
 hash_service = HashService()
 metadata_service = MetadataService()
 detection_service = DetectionService()
@@ -27,22 +27,19 @@ pipeline_service = PipelineService()
 
 
 @router.post("/analyze", response_model=AnalysisResult)
-async def analyze_single_image(
-    file: UploadFile = File(...)
-):
+async def analyze_single_image(file: UploadFile = File(...)):
     """
-    단일 이미지 분석
-    
-    3개 Layer를 순차적으로 실행하여 종합 판정 결과를 반환합니다.
+    Single Image Analysis
+
+    Executes 3 layers sequentially and returns a comprehensive verdict.
     """
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="이미지 파일만 업로드 가능합니다.")
-    
+        raise HTTPException(status_code=400, detail="Only image files are allowed.")
+
     try:
         contents = await file.read()
         result = await pipeline_service.analyze_image(
-            image_bytes=contents,
-            filename=file.filename
+            image_bytes=contents, filename=file.filename
         )
         return result
     except Exception as e:
@@ -54,40 +51,42 @@ async def analyze_batch_images(
     files: List[UploadFile] = File(...),
 ):
     """
-    배치 이미지 분석 (최대 50개)
+    Batch Image Analysis (Max 50)
     """
     if len(files) > 50:
-        raise HTTPException(status_code=400, detail="최대 50개 파일까지 업로드 가능합니다.")
-    
+        raise HTTPException(status_code=400, detail="Up to 50 files allowed.")
+
     results = []
     for file in files:
         if file.content_type and file.content_type.startswith("image/"):
             try:
                 contents = await file.read()
                 result = await pipeline_service.analyze_image(
-                    image_bytes=contents,
-                    filename=file.filename
+                    image_bytes=contents, filename=file.filename
                 )
                 results.append(result)
             except Exception as e:
-                results.append({
-                    "filename": file.filename,
-                    "error": str(e),
-                    "status": "failed"
-                })
-    
-    # 통계 계산
+                results.append(
+                    {"filename": file.filename, "error": str(e), "status": "failed"}
+                )
+
+    # Calculate Statistics
     total = len(results)
-    ai_detected = sum(1 for r in results if isinstance(r, dict) and r.get("final_verdict") == "ai_generated")
-    real_detected = sum(1 for r in results if isinstance(r, dict) and r.get("final_verdict") == "likely_real")
-    
+    ai_detected = sum(
+        1
+        for r in results
+        if isinstance(r, dict) and r.get("final_verdict") == "ai_generated"
+    )
+    real_detected = sum(
+        1
+        for r in results
+        if isinstance(r, dict) and r.get("final_verdict") == "likely_real"
+    )
+
     return BatchAnalysisResult(
         total_processed=total,
         ai_generated_count=ai_detected,
         likely_real_count=real_detected,
         uncertain_count=total - ai_detected - real_detected,
-        results=results
+        results=results,
     )
-
-
-
